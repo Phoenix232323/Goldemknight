@@ -1,0 +1,855 @@
+/* ==========================================================================
+   GoldenKnight Sensor Dashboard
+   Kleuren staan als variabelen bovenaan; het licht- en donkerthema zetten
+   dezelfde variabelen opnieuw, zodat de rest van het bestand er niets van merkt.
+   ========================================================================== */
+
+:root {
+    color-scheme: light;
+
+    /* De sluier trekt de achtergrond naar de basiskleur van het thema toe,
+       zodat tekst erop altijd leesbaar blijft - ook op een lichte foto. */
+    --sluier: #ffffff;
+
+    --op-achtergrond:        #14161a;
+    --op-achtergrond-zacht:  rgba(20, 22, 26, 0.72);
+
+    --kaart:        rgba(255, 255, 255, 0.88);
+    --kaart-rand:   rgba(11, 11, 11, 0.10);
+    --plot-vlak:    #ffffff;
+
+    --tekst-primair:   #0b0b0b;
+    --tekst-secundair: #52514e;
+    --tekst-gedempt:   #76746f;
+
+    --raster:  #e8e8e4;
+    --veld:    rgba(255, 255, 255, 0.92);
+    --veld-rand: rgba(11, 11, 11, 0.18);
+
+    --serie-1: #2a78d6;   /* temperatuur */
+    --serie-2: #eb6834;   /* luchtvochtigheid */
+    --serie-3: #1baf7a;   /* licht */
+
+    --status-goed:     #0ca30c;
+    --status-let-op:   #fab219;
+    --status-ernstig:  #ec835a;
+    --status-kritiek:  #d03b3b;
+
+    --schaduw: 0 6px 24px rgba(0, 0, 0, 0.18);
+    --radius: 16px;
+    --radius-klein: 10px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:where(:not([data-thema="licht"])) {
+        color-scheme: dark;
+        --sluier: #000000;
+        --op-achtergrond:       #ffffff;
+        --op-achtergrond-zacht: rgba(255, 255, 255, 0.74);
+        --kaart:      rgba(26, 28, 33, 0.84);
+        --kaart-rand: rgba(255, 255, 255, 0.12);
+        --plot-vlak:  #1a1c21;
+        --tekst-primair:   #ffffff;
+        --tekst-secundair: #c3c2b7;
+        --tekst-gedempt:   #97968c;
+        --raster:  #2d2f36;
+        --veld:    rgba(255, 255, 255, 0.08);
+        --veld-rand: rgba(255, 255, 255, 0.22);
+        --serie-1: #3987e5;
+        --serie-2: #d95926;
+        --serie-3: #199e70;
+        --schaduw: 0 6px 24px rgba(0, 0, 0, 0.45);
+    }
+}
+
+:root[data-thema="donker"] {
+    color-scheme: dark;
+    --sluier: #000000;
+    --op-achtergrond:       #ffffff;
+    --op-achtergrond-zacht: rgba(255, 255, 255, 0.74);
+    --kaart:      rgba(26, 28, 33, 0.84);
+    --kaart-rand: rgba(255, 255, 255, 0.12);
+    --plot-vlak:  #1a1c21;
+    --tekst-primair:   #ffffff;
+    --tekst-secundair: #c3c2b7;
+    --tekst-gedempt:   #97968c;
+    --raster:  #2d2f36;
+    --veld:    rgba(255, 255, 255, 0.08);
+    --veld-rand: rgba(255, 255, 255, 0.22);
+    --serie-1: #3987e5;
+    --serie-2: #d95926;
+    --serie-3: #199e70;
+    --schaduw: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ===================== Basis ============================================ */
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    margin: 0;
+    padding: 28px 16px 48px;
+    min-height: 100vh;
+    color: var(--op-achtergrond);
+    background-color: #101317;
+}
+
+.achtergrond,
+.achtergrond-sluier {
+    position: fixed;
+    inset: -24px;                 /* marge zodat vervaging geen randen laat zien */
+    z-index: -2;
+    pointer-events: none;
+}
+
+.achtergrond {
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.achtergrond-sluier {
+    z-index: -1;
+    background: var(--sluier);
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+}
+
+h1, h2, h3 { line-height: 1.25; }
+
+a { color: inherit; }
+
+/* ===================== Kop ============================================== */
+
+.kop {
+    max-width: 1180px;
+    margin: 0 auto 26px;
+    text-align: center;
+}
+
+.kop-regel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.kop h1 {
+    font-size: clamp(1.35rem, 3.4vw, 2rem);
+    margin: 0;
+    text-align: left;
+}
+
+.kop-acties {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.gebruiker-chip {
+    font-size: 0.88rem;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--kaart);
+    color: var(--tekst-primair);
+    border: 1px solid var(--kaart-rand);
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 9px;
+    margin: 10px 0 0;
+    color: var(--op-achtergrond-zacht);
+    font-size: 0.95rem;
+}
+
+.stip {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--tekst-gedempt);
+    flex: 0 0 auto;
+}
+.stip.live      { background: var(--status-goed); }
+.stip.simulatie { background: var(--status-let-op); }
+.stip.fout      { background: var(--status-kritiek); }
+
+.sectienav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.sectienav a {
+    text-decoration: none;
+    font-size: 0.88rem;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: var(--kaart);
+    color: var(--tekst-primair);
+    border: 1px solid var(--kaart-rand);
+}
+
+.sectienav a:hover,
+.sectienav a:focus-visible { border-color: var(--serie-1); }
+
+/* ===================== Kaarten en secties =============================== */
+
+main { max-width: 1180px; margin: 0 auto; }
+
+.sectie { margin-bottom: 36px; scroll-margin-top: 20px; }
+
+.sectie-kop {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.sectie-kop h2 { margin: 0; font-size: 1.2rem; }
+
+.sectie-uitleg {
+    margin: 0 0 14px;
+    font-size: 0.88rem;
+    color: var(--tekst-secundair);
+}
+
+/* Staat de uitleg niet in een kaart, dan ligt hij op de achtergrond en
+   heeft hij de kleur nodig die daar leesbaar op is. */
+.sectie > .sectie-uitleg { color: var(--op-achtergrond-zacht); }
+
+.kaart {
+    background: var(--kaart);
+    border: 1px solid var(--kaart-rand);
+    border-radius: var(--radius);
+    box-shadow: var(--schaduw);
+    padding: 20px;
+    color: var(--tekst-primair);
+    backdrop-filter: blur(10px);
+}
+
+.kaart h3 { margin: 0 0 12px; font-size: 1rem; }
+
+.tweekolom {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+    align-items: start;
+}
+
+.banner {
+    max-width: 1180px;
+    margin: 0 auto 22px;
+    padding: 12px 16px;
+    border-radius: var(--radius-klein);
+    background: var(--kaart);
+    border-left: 4px solid var(--status-let-op);
+    color: var(--tekst-primair);
+    font-size: 0.92rem;
+}
+
+/* ===================== Sensorkaarten (oorspronkelijke opzet) ============ */
+
+.dashboard {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.card {
+    background: var(--kaart);
+    border: 1px solid var(--kaart-rand);
+    width: 230px;
+    padding: 26px 24px;
+    border-radius: var(--radius);
+    box-shadow: var(--schaduw);
+    color: var(--tekst-primair);
+    backdrop-filter: blur(10px);
+}
+
+.icon { font-size: 42px; line-height: 1; }
+
+.label {
+    font-size: 1rem;
+    color: var(--tekst-secundair);
+    margin-top: 10px;
+}
+
+.value {
+    font-size: 2.4rem;
+    font-weight: 600;
+    color: var(--tekst-primair);
+    margin-top: 10px;
+}
+
+.unit {
+    font-size: 1.1rem;
+    color: var(--tekst-gedempt);
+    margin-left: 3px;
+    font-weight: 400;
+}
+
+#timestamp {
+    margin-top: 22px;
+    color: var(--op-achtergrond-zacht);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+/* ===================== Knoppen en velden ================================ */
+
+.knop {
+    display: inline-block;
+    border: 1px solid var(--kaart-rand);
+    border-radius: var(--radius-klein);
+    padding: 9px 16px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    background: var(--veld);
+    color: var(--tekst-primair);
+}
+
+.knop:hover { border-color: var(--serie-1); }
+
+.knop-primair {
+    background: var(--serie-1);
+    border-color: var(--serie-1);
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.knop-primair:hover { filter: brightness(1.08); }
+
+.knop-stil { background: var(--veld); }
+.knop-breed { width: 100%; margin-top: 8px; }
+
+.knop-gevaar { color: var(--status-kritiek); }
+
+.filterrij { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.filterknop {
+    border: 1px solid var(--kaart-rand);
+    background: var(--kaart);
+    color: var(--tekst-secundair);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 0.84rem;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.filterknop.actief,
+.filterknop[aria-pressed="true"] {
+    background: var(--serie-1);
+    border-color: var(--serie-1);
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.filterknop-los { margin-left: 6px; }
+
+.veld { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.veld-breed { grid-column: 1 / -1; }
+
+label {
+    font-size: 0.84rem;
+    color: var(--tekst-secundair);
+    font-weight: 500;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="date"],
+select,
+textarea {
+    font-family: inherit;
+    font-size: 0.95rem;
+    padding: 9px 11px;
+    border-radius: var(--radius-klein);
+    border: 1px solid var(--veld-rand);
+    background: var(--veld);
+    color: var(--tekst-primair);
+    width: 100%;
+}
+
+textarea { resize: vertical; }
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--serie-1);
+    outline-offset: 2px;
+}
+
+input[type="range"] { width: 100%; accent-color: var(--serie-1); }
+
+.melding {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-klein);
+    font-size: 0.88rem;
+    border-left: 4px solid var(--serie-1);
+    background: var(--veld);
+    color: var(--tekst-primair);
+}
+
+.melding-fout   { border-left-color: var(--status-kritiek); }
+.melding-goed   { border-left-color: var(--status-goed); }
+
+.kleine-tekst { font-size: 0.82rem; color: var(--tekst-secundair); }
+
+/* ===================== Grafieken ======================================== */
+
+.grafiekraster {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+}
+
+.grafiekkaart {
+    margin: 0;
+    background: var(--kaart);
+    border: 1px solid var(--kaart-rand);
+    border-radius: var(--radius);
+    box-shadow: var(--schaduw);
+    padding: 18px;
+    backdrop-filter: blur(10px);
+}
+
+.grafiekkaart figcaption {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.grafiek-titel { font-weight: 600; color: var(--tekst-primair); }
+
+.grafiek-nu {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--tekst-primair);
+}
+
+.grafiek-vlak {
+    background: var(--plot-vlak);
+    border-radius: var(--radius-klein);
+    padding: 6px;
+    position: relative;
+}
+
+.grafiek-vlak svg { display: block; width: 100%; height: auto; }
+
+.grafiek-voet {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: var(--tekst-secundair);
+    font-variant-numeric: tabular-nums;
+}
+
+.grafiek-leeg {
+    padding: 28px 10px;
+    text-align: center;
+    color: var(--tekst-gedempt);
+    font-size: 0.88rem;
+}
+
+/* Tooltip bij het zweven over een grafiek */
+.grafiek-tip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--plot-vlak);
+    color: var(--tekst-primair);
+    border: 1px solid var(--kaart-rand);
+    border-radius: 8px;
+    padding: 6px 9px;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+    transform: translate(-50%, -115%);
+    opacity: 0;
+    transition: opacity 0.1s ease;
+    z-index: 5;
+}
+
+.grafiek-tip.zichtbaar { opacity: 1; }
+.grafiek-tip b { font-variant-numeric: tabular-nums; }
+
+/* ===================== Tabellen ========================================= */
+
+.tabel-scroll { max-height: 320px; overflow: auto; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+th, td {
+    text-align: left;
+    padding: 7px 9px;
+    border-bottom: 1px solid var(--kaart-rand);
+    font-variant-numeric: tabular-nums;
+}
+
+th {
+    position: sticky;
+    top: 0;
+    background: var(--plot-vlak);
+    color: var(--tekst-secundair);
+    font-weight: 600;
+}
+
+tbody tr:last-child td { border-bottom: none; }
+
+/* ===================== Weer ============================================= */
+
+.weerkaart { display: flex; flex-direction: column; gap: 18px; }
+
+.weer-nu {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.weer-hoofd { display: flex; align-items: center; gap: 16px; }
+
+.weer-icoon { font-size: 54px; line-height: 1; }
+
+.weer-temp { font-size: 2.6rem; font-weight: 600; line-height: 1.05; }
+
+.weer-omschrijving { color: var(--tekst-secundair); }
+
+.weer-plaats { color: var(--tekst-gedempt); font-size: 0.85rem; }
+
+.weer-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 10px 18px;
+    margin: 0;
+    flex: 1 1 340px;
+}
+
+.weer-details div { margin: 0; }
+.weer-details dt { font-size: 0.78rem; color: var(--tekst-gedempt); }
+.weer-details dd {
+    margin: 2px 0 0;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.weer-grafiek { margin: 0; }
+.weer-grafiek figcaption {
+    font-size: 0.84rem;
+    color: var(--tekst-secundair);
+    margin-bottom: 8px;
+}
+
+.weer-dagen {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+}
+
+.weer-dag {
+    background: var(--veld);
+    border: 1px solid var(--kaart-rand);
+    border-radius: var(--radius-klein);
+    padding: 12px 10px;
+    text-align: center;
+}
+
+.weer-dag .dag { font-weight: 600; font-size: 0.86rem; }
+.weer-dag .icoon { font-size: 26px; display: block; margin: 5px 0; }
+.weer-dag .temps { font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.weer-dag .temps .min { color: var(--tekst-gedempt); }
+.weer-dag .neerslag { font-size: 0.76rem; color: var(--tekst-secundair); margin-top: 3px; }
+
+/* ===================== Backlog ========================================== */
+
+.backlog-formulier {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0 14px;
+    align-items: end;
+    margin-bottom: 8px;
+}
+
+.backlog-formulier button { margin-bottom: 12px; }
+
+.backlog-tellers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 14px 0 12px;
+}
+
+.teller {
+    font-size: 0.8rem;
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: var(--veld);
+    border: 1px solid var(--kaart-rand);
+    color: var(--tekst-secundair);
+}
+
+.backlog-lijst { list-style: none; margin: 0; padding: 0; }
+
+.backlog-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 13px 0;
+    border-bottom: 1px solid var(--kaart-rand);
+}
+
+.backlog-item:last-child { border-bottom: none; }
+
+.backlog-inhoud { flex: 1 1 auto; min-width: 0; }
+
+.backlog-titel { font-weight: 600; overflow-wrap: anywhere; }
+
+.backlog-item.klaar .backlog-titel {
+    text-decoration: line-through;
+    color: var(--tekst-gedempt);
+}
+
+.backlog-omschrijving {
+    font-size: 0.86rem;
+    color: var(--tekst-secundair);
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.backlog-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 7px;
+    font-size: 0.76rem;
+    color: var(--tekst-gedempt);
+    align-items: center;
+}
+
+.merk {
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--kaart-rand);
+    background: var(--veld);
+}
+
+.merk-hoog    { border-color: var(--status-kritiek); color: var(--status-kritiek); }
+.merk-normaal { color: var(--tekst-secundair); }
+.merk-laag    { color: var(--tekst-gedempt); }
+.merk-verlopen { border-color: var(--status-kritiek); color: var(--status-kritiek); }
+
+.backlog-knoppen { display: flex; gap: 6px; flex-wrap: wrap; flex: 0 0 auto; }
+
+.mini-knop {
+    border: 1px solid var(--kaart-rand);
+    background: var(--veld);
+    color: var(--tekst-secundair);
+    border-radius: var(--radius-klein);
+    padding: 5px 10px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.mini-knop:hover { border-color: var(--serie-1); color: var(--tekst-primair); }
+.mini-knop.actief { background: var(--serie-1); border-color: var(--serie-1); color: #fff; }
+.mini-knop.verwijder:hover { border-color: var(--status-kritiek); color: var(--status-kritiek); }
+
+.backlog-voet { margin-top: 16px; }
+
+.leeg {
+    padding: 22px 6px;
+    text-align: center;
+    color: var(--tekst-gedempt);
+    font-size: 0.9rem;
+}
+
+/* ===================== Veiligheid ======================================= */
+
+.score-chip {
+    font-size: 0.85rem;
+    padding: 5px 13px;
+    border-radius: 999px;
+    background: var(--kaart);
+    border: 1px solid var(--kaart-rand);
+    color: var(--tekst-primair);
+}
+
+.controlelijst { list-style: none; margin: 0; padding: 0; }
+
+.controlelijst li {
+    display: flex;
+    gap: 11px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--kaart-rand);
+}
+
+.controlelijst li:last-child { border-bottom: none; }
+
+.controle-icoon {
+    flex: 0 0 auto;
+    font-weight: 700;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 0.78rem;
+    color: #ffffff;
+}
+
+.controle-icoon.ok       { background: var(--status-goed); }
+.controle-icoon.let-op   { background: var(--status-kritiek); }
+
+.controle-naam { font-weight: 600; font-size: 0.92rem; }
+.controle-uitleg { font-size: 0.83rem; color: var(--tekst-secundair); margin-top: 2px; }
+
+.resultaat-goed  { color: var(--status-goed); font-weight: 600; }
+.resultaat-fout  { color: var(--status-kritiek); font-weight: 600; }
+
+/* ===================== Instellingen ===================================== */
+
+.preset-raster {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.preset {
+    height: 74px;
+    border-radius: var(--radius-klein);
+    border: 2px solid transparent;
+    cursor: pointer;
+    position: relative;
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: flex-end;
+    padding: 0;
+    overflow: hidden;
+}
+
+.preset span {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #ffffff;
+    font-size: 0.75rem;
+    padding: 4px 6px;
+    text-align: center;
+}
+
+.preset.actief { border-color: var(--serie-1); }
+.preset:disabled { opacity: 0.45; cursor: not-allowed; }
+.preset-eigen { background-color: var(--veld); }
+
+.upload-formulier {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 18px;
+}
+
+.upload-formulier input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    overflow: hidden;
+}
+
+.upload-formulier label.knop { margin: 0; }
+
+.schuifregelaars {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0 16px;
+}
+
+.waarde {
+    float: right;
+    color: var(--tekst-primair);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ===================== Inloggen en foutpagina =========================== */
+
+body.gecentreerd {
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+}
+
+.smalle-kaart {
+    width: min(420px, 100%);
+    background: var(--kaart);
+    border: 1px solid var(--kaart-rand);
+    border-radius: var(--radius);
+    box-shadow: var(--schaduw);
+    padding: 32px 28px;
+    color: var(--tekst-primair);
+    backdrop-filter: blur(10px);
+    text-align: center;
+}
+
+.smalle-kaart form { text-align: left; margin-top: 18px; }
+.smalle-kaart label { display: block; margin: 12px 0 5px; }
+
+.login-merk h1 { margin: 6px 0 2px; font-size: 1.5rem; }
+.login-icoon { font-size: 44px; }
+.ondertitel { margin: 0; color: var(--tekst-secundair); font-size: 0.92rem; }
+
+.fout-code { font-size: 3rem; margin: 0 0 8px; }
+
+/* ===================== Voet ============================================= */
+
+.voet {
+    max-width: 1180px;
+    margin: 30px auto 0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--op-achtergrond-zacht);
+}
+
+/* ===================== Kleine schermen ================================== */
+
+@media (max-width: 640px) {
+    body { padding: 18px 12px 34px; }
+    .card { width: 100%; }
+    .kop h1 { font-size: 1.2rem; }
+    .kop-regel { justify-content: center; }
+    .kop h1 { text-align: center; width: 100%; }
+    .weer-temp { font-size: 2.1rem; }
+    .backlog-item { flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+}

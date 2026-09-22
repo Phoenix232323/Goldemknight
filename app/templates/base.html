@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="nl" data-thema="{{ thema|default('auto') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{% block titel %}GoldenKnight Sensor Dashboard{% endblock %}</title>
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="{% block bodyklasse %}{% endblock %}">
+    <div class="achtergrond" id="achtergrond"
+         style="background-image: {{ achtergrond_css|default("linear-gradient(160deg, #0d1b2a 0%, #16324f 55%, #1b3a5c 100%)") }};
+                filter: blur({{ achtergrond_vervaging|default(0) }}px);"></div>
+    <div class="achtergrond-sluier" id="achtergrond-sluier"
+         style="opacity: {{ achtergrond_verduistering|default(35) / 100 }};"></div>
+
+    {% block inhoud %}{% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,363 @@
+{% extends "base.html" %}
+{% block titel %}GoldenKnight Sensor Dashboard{% endblock %}
+
+{% block inhoud %}
+<div id="dashboard-config"
+     data-ververs-ms="{{ ververs_ms }}"
+     data-csrf="{{ csrf_token }}"
+     data-periode="{{ standaard_periode }}"
+     data-weer-aan="{{ 'ja' if weer_aan else 'nee' }}"
+     hidden></div>
+
+<header class="kop">
+    <div class="kop-regel">
+        <h1>&#127760; GoldenKnight Sensor Dashboard</h1>
+        <div class="kop-acties">
+            <span class="gebruiker-chip" title="Ingelogd als {{ gebruiker }}">
+                <span aria-hidden="true">&#128100;</span> {{ gebruiker }}
+            </span>
+            <a class="knop knop-stil" href="{{ url_for('auth.logout') }}">Uitloggen</a>
+        </div>
+    </div>
+    <p class="status" id="status-regel">
+        <span class="stip" id="status-stip" aria-hidden="true"></span>
+        <span id="status-tekst">Verbinden met de sensor...</span>
+    </p>
+
+    <nav class="sectienav" aria-label="Onderdelen">
+        <a href="#sensoren">Sensoren</a>
+        <a href="#grafieken">Grafieken</a>
+        {% if weer_aan %}<a href="#weer">Weer</a>{% endif %}
+        <a href="#backlog">Backlog</a>
+        <a href="#veiligheid">Veiligheid</a>
+        <a href="#instellingen">Instellingen</a>
+    </nav>
+</header>
+
+{% if wachtwoord_verlopen %}
+<div class="banner banner-waarschuwing" role="alert">
+    <strong>Let op:</strong> je gebruikt nog het standaardwachtwoord.
+    <a href="#instellingen">Stel nu een eigen wachtwoord in.</a>
+</div>
+{% endif %}
+
+<main>
+
+<!-- ===================== Sensoren (ongewijzigd onderdeel) ================ -->
+<section id="sensoren" class="sectie">
+    <div class="dashboard">
+        <div class="card">
+            <div class="icon" aria-hidden="true">&#127777;&#65039;</div>
+            <div class="label">Temperatuur</div>
+            <div class="value">
+                <span id="temperature">--</span><span class="unit">&deg;C</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="icon" aria-hidden="true">&#128167;</div>
+            <div class="label">Luchtvochtigheid</div>
+            <div class="value">
+                <span id="humidity">--</span><span class="unit">%</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="icon" aria-hidden="true">&#128161;</div>
+            <div class="label">Licht</div>
+            <div class="value">
+                <span id="light">--</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="timestamp">Laatste update: --</div>
+</section>
+
+<!-- ===================== Grafieken ====================================== -->
+<section id="grafieken" class="sectie">
+    <div class="sectie-kop">
+        <h2>&#128200; Grafieken</h2>
+        <div class="filterrij" role="group" aria-label="Periode kiezen">
+            {% for periode in periodes %}
+            <button type="button" class="filterknop{% if periode.sleutel == standaard_periode %} actief{% endif %}"
+                    data-periode="{{ periode.sleutel }}">{{ periode.label }}</button>
+            {% endfor %}
+            <button type="button" class="filterknop filterknop-los" id="tabel-schakelaar"
+                    aria-pressed="false">Tabel</button>
+        </div>
+    </div>
+
+    <p class="sectie-uitleg" id="grafiek-uitleg">
+        Metingen worden elke minuut bewaard. De grafiek toont het gemiddelde per tijdvak.
+    </p>
+
+    <div class="grafiekraster" id="grafiekraster">
+        {% for metriek in metrieken %}
+        <figure class="kaart grafiekkaart" data-metriek="{{ metriek.sleutel }}">
+            <figcaption>
+                <span class="grafiek-titel">{{ metriek.naam }}</span>
+                <span class="grafiek-nu" data-rol="huidig">--</span>
+            </figcaption>
+            <div class="grafiek-vlak" data-rol="grafiek"
+                 role="img"
+                 aria-label="Verloop van {{ metriek.naam|lower }} over de gekozen periode"></div>
+            <div class="grafiek-voet">
+                <span data-rol="min">min --</span>
+                <span data-rol="gem">gem --</span>
+                <span data-rol="max">max --</span>
+            </div>
+        </figure>
+        {% endfor %}
+    </div>
+
+    <div class="kaart tabelkaart" id="grafiek-tabel" hidden>
+        <h3>Meetwaarden</h3>
+        <div class="tabel-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Tijd</th>
+                        {% for metriek in metrieken %}
+                        <th scope="col">{{ metriek.naam }}{% if metriek.eenheid %} ({{ metriek.eenheid }}){% endif %}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody id="grafiek-tabel-inhoud"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- ===================== Weer =========================================== -->
+{% if weer_aan %}
+<section id="weer" class="sectie">
+    <div class="sectie-kop">
+        <h2>&#127780;&#65039; Weersoverzicht</h2>
+        <button type="button" class="filterknop filterknop-los" id="weer-verversen">Verversen</button>
+    </div>
+
+    <div class="kaart weerkaart" id="weerkaart" aria-live="polite">
+        <p class="sectie-uitleg" id="weer-melding">Weergegevens ophalen...</p>
+
+        <div class="weer-nu" id="weer-nu" hidden>
+            <div class="weer-hoofd">
+                <span class="weer-icoon" id="weer-icoon" aria-hidden="true">&#127777;&#65039;</span>
+                <div>
+                    <div class="weer-temp"><span id="weer-temperatuur">--</span><span class="unit">&deg;C</span></div>
+                    <div class="weer-omschrijving" id="weer-omschrijving">--</div>
+                    <div class="weer-plaats" id="weer-plaats">{{ weer_plaats }}</div>
+                </div>
+            </div>
+            <dl class="weer-details">
+                <div><dt>Gevoel</dt><dd id="weer-gevoel">--</dd></div>
+                <div><dt>Wind</dt><dd id="weer-wind">--</dd></div>
+                <div><dt>Neerslag</dt><dd id="weer-neerslag">--</dd></div>
+                <div><dt>Vocht</dt><dd id="weer-vocht">--</dd></div>
+                <div><dt>Zon op</dt><dd id="weer-zon-op">--</dd></div>
+                <div><dt>Zon onder</dt><dd id="weer-zon-onder">--</dd></div>
+            </dl>
+        </div>
+
+        <figure class="weer-grafiek" id="weer-grafiek-figuur" hidden>
+            <figcaption>Temperatuur komende 24 uur (&deg;C)</figcaption>
+            <div class="grafiek-vlak" id="weer-grafiek" role="img"
+                 aria-label="Verwachte temperatuur voor de komende 24 uur"></div>
+        </figure>
+
+        <div class="weer-dagen" id="weer-dagen"></div>
+    </div>
+</section>
+{% endif %}
+
+<!-- ===================== Backlog ======================================== -->
+<section id="backlog" class="sectie">
+    <div class="sectie-kop">
+        <h2>&#128203; Backlog</h2>
+        <div class="filterrij" role="group" aria-label="Backlog filteren">
+            <button type="button" class="filterknop actief" data-status="alle">Alles</button>
+            {% for status in statussen %}
+            <button type="button" class="filterknop" data-status="{{ status.sleutel }}">{{ status.naam }}</button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="kaart">
+        <form id="backlog-formulier" class="backlog-formulier" autocomplete="off">
+            <div class="veld veld-breed">
+                <label for="backlog-titel">Nieuwe taak</label>
+                <input type="text" id="backlog-titel" name="titel" maxlength="160"
+                       placeholder="Bijv. tweede sensor aansluiten" required>
+            </div>
+            <div class="veld">
+                <label for="backlog-prioriteit">Prioriteit</label>
+                <select id="backlog-prioriteit" name="prioriteit">
+                    {% for prioriteit in prioriteiten %}
+                    <option value="{{ prioriteit.sleutel }}"{% if prioriteit.sleutel == 'normaal' %} selected{% endif %}>{{ prioriteit.naam }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="veld">
+                <label for="backlog-deadline">Deadline</label>
+                <input type="date" id="backlog-deadline" name="deadline">
+            </div>
+            <div class="veld veld-breed">
+                <label for="backlog-omschrijving">Toelichting (optioneel)</label>
+                <textarea id="backlog-omschrijving" name="omschrijving" rows="2"
+                          maxlength="2000" placeholder="Extra uitleg, onderdelen, links..."></textarea>
+            </div>
+            <button type="submit" class="knop knop-primair">Toevoegen</button>
+        </form>
+
+        <p class="melding" id="backlog-melding" hidden role="status"></p>
+
+        <div class="backlog-tellers" id="backlog-tellers"></div>
+        <ul class="backlog-lijst" id="backlog-lijst"></ul>
+
+        <div class="backlog-voet">
+            <button type="button" class="knop knop-stil" id="backlog-opruimen">
+                Afgeronde taken verwijderen
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- ===================== Veiligheid ===================================== -->
+<section id="veiligheid" class="sectie">
+    <div class="sectie-kop">
+        <h2>&#128274; Veiligheid</h2>
+        <span class="score-chip" id="veiligheid-score">--</span>
+    </div>
+
+    <div class="tweekolom">
+        <div class="kaart">
+            <h3>Controlelijst</h3>
+            <ul class="controlelijst" id="veiligheid-controles"></ul>
+        </div>
+
+        <div class="kaart">
+            <h3>Inlogpogingen</h3>
+            <p class="sectie-uitleg" id="veiligheid-samenvatting">--</p>
+            <div class="tabel-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Tijd</th>
+                            <th scope="col">Gebruiker</th>
+                            <th scope="col">IP-adres</th>
+                            <th scope="col">Resultaat</th>
+                        </tr>
+                    </thead>
+                    <tbody id="veiligheid-pogingen"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===================== Instellingen =================================== -->
+<section id="instellingen" class="sectie">
+    <div class="sectie-kop">
+        <h2>&#9881;&#65039; Instellingen</h2>
+    </div>
+
+    <div class="tweekolom">
+        <div class="kaart">
+            <h3>Achtergrond</h3>
+
+            <p class="sectie-uitleg">Kies een ingebouwde achtergrond of upload een eigen foto.</p>
+
+            <div class="preset-raster" id="preset-raster">
+                {% for preset in achtergrond.presets %}
+                <button type="button" class="preset{% if preset.sleutel == achtergrond.preset and achtergrond.type == 'preset' %} actief{% endif %}"
+                        data-preset="{{ preset.sleutel }}"
+                        style="background-image: {{ preset.css }};"
+                        aria-pressed="{{ 'true' if preset.sleutel == achtergrond.preset and achtergrond.type == 'preset' else 'false' }}">
+                    <span>{{ preset.naam }}</span>
+                </button>
+                {% endfor %}
+                <button type="button" class="preset preset-eigen{% if achtergrond.type == 'afbeelding' %} actief{% endif %}"
+                        id="preset-eigen"
+                        data-preset="afbeelding"
+                        {% if achtergrond_url %}style="background-image: url('{{ achtergrond_url }}');"{% endif %}
+                        aria-pressed="{{ 'true' if achtergrond.type == 'afbeelding' else 'false' }}"
+                        {% if not achtergrond_url %}disabled{% endif %}>
+                    <span>Eigen foto</span>
+                </button>
+            </div>
+
+            <form id="achtergrond-upload" class="upload-formulier">
+                <label class="knop knop-stil" for="achtergrond-bestand">Afbeelding kiezen</label>
+                <input type="file" id="achtergrond-bestand" name="afbeelding"
+                       accept="image/png,image/jpeg,image/webp,image/gif">
+                <span class="kleine-tekst" id="achtergrond-bestandsnaam">Geen bestand gekozen</span>
+                <button type="submit" class="knop knop-primair">Uploaden</button>
+                <button type="button" class="knop knop-stil" id="achtergrond-verwijderen"
+                        {% if not achtergrond_url %}hidden{% endif %}>Eigen foto verwijderen</button>
+            </form>
+
+            <div class="schuifregelaars">
+                <div class="veld">
+                    <label for="regelaar-verduistering">
+                        Verduistering <span class="waarde" id="waarde-verduistering">{{ achtergrond.verduistering }}%</span>
+                    </label>
+                    <input type="range" id="regelaar-verduistering" min="0" max="85" step="5"
+                           value="{{ achtergrond.verduistering }}">
+                </div>
+                <div class="veld">
+                    <label for="regelaar-vervaging">
+                        Vervaging <span class="waarde" id="waarde-vervaging">{{ achtergrond.vervaging }}px</span>
+                    </label>
+                    <input type="range" id="regelaar-vervaging" min="0" max="20" step="1"
+                           value="{{ achtergrond.vervaging }}">
+                </div>
+                <div class="veld">
+                    <label for="thema-keuze">Thema</label>
+                    <select id="thema-keuze">
+                        <option value="auto"{% if achtergrond.thema == 'auto' %} selected{% endif %}>Automatisch (volgt het apparaat)</option>
+                        <option value="donker"{% if achtergrond.thema == 'donker' %} selected{% endif %}>Altijd donker</option>
+                        <option value="licht"{% if achtergrond.thema == 'licht' %} selected{% endif %}>Altijd licht</option>
+                    </select>
+                </div>
+            </div>
+
+            <p class="melding" id="achtergrond-melding" hidden role="status"></p>
+        </div>
+
+        <div class="kaart">
+            <h3>Wachtwoord wijzigen</h3>
+            <p class="sectie-uitleg">
+                Minimaal 10 tekens. Na het wijzigen worden alle openstaande
+                sessies uitgelogd.
+            </p>
+            <form id="wachtwoord-formulier" autocomplete="off">
+                <div class="veld">
+                    <label for="wachtwoord-huidig">Huidig wachtwoord</label>
+                    <input type="password" id="wachtwoord-huidig" autocomplete="current-password" required>
+                </div>
+                <div class="veld">
+                    <label for="wachtwoord-nieuw">Nieuw wachtwoord</label>
+                    <input type="password" id="wachtwoord-nieuw" autocomplete="new-password" required minlength="10">
+                </div>
+                <div class="veld">
+                    <label for="wachtwoord-herhaling">Nieuw wachtwoord herhalen</label>
+                    <input type="password" id="wachtwoord-herhaling" autocomplete="new-password" required minlength="10">
+                </div>
+                <button type="submit" class="knop knop-primair">Wachtwoord opslaan</button>
+            </form>
+            <p class="melding" id="wachtwoord-melding" hidden role="status"></p>
+        </div>
+    </div>
+</section>
+
+</main>
+
+<footer class="voet">
+    GoldenKnight dashboard v{{ versie }} &middot; draait op Raspberry Pi
+</footer>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/grafiek.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,5 @@
+# Alleen installeren op de Raspberry Pi zelf, als de sensoren aangesloten zijn.
+#   pip install -r requirements-hardware.txt
+adafruit-circuitpython-dht>=4.0
+smbus2>=0.4
+spidev>=3.6

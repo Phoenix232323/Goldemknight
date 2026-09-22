@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titel %}{{ code }} - GoldenKnight{% endblock %}
+{% block bodyklasse %}gecentreerd{% endblock %}
+{% block inhoud %}
+<main class="smalle-kaart">
+    <h1 class="fout-code">{{ code }}</h1>
+    <p>{{ melding }}</p>
+    <a class="knop knop-primair" href="{{ url_for('pages.dashboard') }}">Terug naar het dashboard</a>
+</main>
+{% endblock %}

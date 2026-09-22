@@ -1,0 +1,47 @@
+# systemd-service zodat het dashboard automatisch start bij het opstarten
+# van de Raspberry Pi.
+#
+#   sudo cp deploy/goldenknight.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now goldenknight
+#
+# Pas User, Group en WorkingDirectory aan als je project ergens anders staat.
+
+[Unit]
+Description=GoldenKnight Sensor Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/Goldemknight
+Environment="PATH=/home/pi/Goldemknight/.venv/bin"
+
+# Eén worker: de achtergrondthread die metingen wegschrijft hoort maar
+# één keer te draaien. Threads vangen de gelijktijdige verzoeken op.
+ExecStart=/home/pi/Goldemknight/.venv/bin/gunicorn \
+    --workers 1 \
+    --threads 4 \
+    --bind 127.0.0.1:5000 \
+    --access-logfile - \
+    --error-logfile - \
+    "run:app"
+
+Restart=on-failure
+RestartSec=5
+
+# Beperk wat de service mag - scheelt schade als er ooit iets misgaat.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/pi/Goldemknight/instance
+
+# De regels hierboven met ProtectHome moeten uit als je de GPIO/I2C gebruikt
+# via /dev; voeg dan toe:
+#   SupplementaryGroups=gpio i2c spi
+
+[Install]
+WantedBy=multi-user.target

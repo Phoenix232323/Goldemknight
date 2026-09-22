@@ -1,0 +1,11 @@
+# Kern van de webapplicatie (werkt op Raspberry Pi OS 64-bit, Python 3.9+)
+Flask>=3.0,<4.0
+gunicorn>=21.2
+
+# --- Optioneel: echte sensoren ---------------------------------------------
+# Installeer deze alleen als de bijbehorende hardware is aangesloten.
+# De applicatie werkt zonder deze pakketten (dan draait de simulatiemodus).
+#
+#   pip install adafruit-circuitpython-dht   # DHT11/DHT22 temperatuur + vocht
+#   pip install smbus2                        # BH1750 lichtsensor via I2C
+#   pip install spidev                        # LDR via MCP3008 (SPI)
