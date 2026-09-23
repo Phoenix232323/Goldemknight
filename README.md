@@ -60,8 +60,26 @@ dashboard laat een waarschuwing zien zolang je het standaardwachtwoord gebruikt.
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 cp .env.example .env          # eventueel aanpassen
-./.venv/bin/python run.py
+./.venv/bin/python app.py
 ```
+
+`app.py` en `run.py` doen hetzelfde - gebruik welke je wilt.
+
+### Kom je van de eerste versie?
+
+In het begin stond de hele Flask-app in één `app.py`. Alles wat dat bestand
+deed, zit nu in het project:
+
+| Toen in `app.py` | Nu |
+|---|---|
+| `POST /api/sensor` | hetzelfde gebleven: de ESP32 stuurt `temperatuur`, `luchtvochtigheid` en `licht`, en krijgt `success` / `message` / `data` terug |
+| `GET /api/sensor` | hetzelfde, maar nu achter een login |
+| `GET /` met `index.html` | het dashboard, met grafieken, weer, backlog en instellingen erbij |
+| de meting alleen in het geheugen | ook in de database, zodat de grafieken een geschiedenis hebben |
+| `debug=True` | standaard uit; aanzetten met `GK_DEBUG=true` in `.env` |
+
+Je hoeft aan de ESP32 dus niets te veranderen. Heb je nog een eigen oude
+`app.py` staan, gooi die dan weg - de nieuwe staat al in het project.
 
 ---
 
@@ -217,7 +235,8 @@ Wachtwoord vergeten? Gebruik `tools/beheer.py wachtwoord <naam>` op de Pi zelf.
 ## Hoe het in elkaar zit
 
 ```
-run.py                     start de applicatie
+app.py                     start de applicatie (of: run.py, hetzelfde)
+run.py                     hetzelfde startpunt; systemd gebruikt "run:app"
 app/
   __init__.py              zet Flask in elkaar, start de meetthread
   config.py                instellingen uit .env
