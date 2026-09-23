@@ -1,15 +1,21 @@
-"""Uitlezen van de sensoren, met een simulatiemodus als er niets aangesloten is.
+"""Waar de meetwaarden vandaan komen.
 
-Ondersteund:
+De gewone manier van werken is de **XIAO ESP32-C3**: die meet temperatuur,
+luchtvochtigheid en licht en stuurt ze naar de Pi met een POST naar
+``/api/sensor``. De Pi meet dus zelf niets; hij onthoudt alleen het laatste
+bericht en schrijft dat weg voor de grafieken.
+
+Hoort de Pi een tijdje niets meer van de ESP32, dan zegt het dashboard dat de
+verbinding weg is in plaats van een oude waarde te blijven tonen.
+
+Daarnaast blijven deze bronnen beschikbaar, voor het geval er ooit iets
+rechtstreeks aan de Pi komt te hangen:
 
 * DHT11 / DHT22 (temperatuur + luchtvochtigheid) via ``adafruit-circuitpython-dht``
 * BH1750 lichtsensor via I2C (``smbus2``)
 * LDR via een MCP3008 A/D-omzetter op SPI (``spidev``)
-* een externe JSON-service (als je al een eigen sensorscript draait)
-
-Ontbreekt een bibliotheek of hardware, dan valt die sensor terug op ``None``;
-staat er helemaal geen hardware, dan levert de simulatiemodus realistische
-waarden zodat het dashboard altijd iets laat zien.
+* een externe JSON-service (``GK_SENSOR_SOURCE=extern``)
+* een simulatiemodus met realistische nepdata, om zonder hardware te testen
 """
 
 from __future__ import annotations
@@ -103,10 +109,15 @@ class SensorReader:
         self._spi = None
         self._spi_failed = False
 
-        bron = str(config.get("SENSOR_SOURCE", "auto")).lower()
-        if bron not in {"auto", "hardware", "simulatie", "extern"}:
-            log.warning("Onbekende GK_SENSOR_SOURCE '%s', val terug op 'auto'.", bron)
-            bron = "auto"
+        self._laatste_bericht: Reading | None = None
+        self._bericht_ontvangen_op = 0.0
+
+        bron = str(config.get("SENSOR_SOURCE", "esp32")).lower()
+        if bron in {"push", "esp32-c3", "xiao"}:
+            bron = "esp32"
+        if bron not in {"esp32", "auto", "hardware", "simulatie", "extern"}:
+            log.warning("Onbekende GK_SENSOR_SOURCE '%s', val terug op 'esp32'.", bron)
+            bron = "esp32"
         self.source_mode = bron
 
     # --- Hardware ----------------------------------------------------------
@@ -211,10 +222,64 @@ class SensorReader:
             timestamp=datetime.now(timezone.utc),
         )
 
+    # --- Berichten van de ESP32 -------------------------------------------
+
+    def ontvang(
+        self,
+        temperature: float | None,
+        humidity: float | None,
+        light: float | None,
+    ) -> Reading:
+        """Neemt een meting aan die de ESP32-C3 heeft opgestuurd."""
+        meting = Reading(
+            temperature=_round(temperature),
+            humidity=_round(humidity),
+            light=_round(light, 0),
+            source="esp32",
+            timestamp=datetime.now(timezone.utc),
+        )
+        with self._lock:
+            self._laatste_bericht = meting
+            self._bericht_ontvangen_op = time.monotonic()
+            # De cache mag niet in de weg zitten: dit is verse data.
+            self._cache = meting
+            self._cached_at = self._bericht_ontvangen_op
+        return meting
+
+    @property
+    def _max_leeftijd(self) -> float:
+        return max(5, int(self._config.get("SENSOR_MAX_AGE_SECONDS", 120)))
+
+    def _bericht_indien_vers(self) -> Reading | None:
+        if self._laatste_bericht is None:
+            return None
+        if time.monotonic() - self._bericht_ontvangen_op > self._max_leeftijd:
+            return None
+        return self._laatste_bericht
+
+    def seconden_sinds_bericht(self) -> float | None:
+        """Hoe lang geleden de ESP32 voor het laatst iets stuurde."""
+        with self._lock:
+            if self._laatste_bericht is None:
+                return None
+            return time.monotonic() - self._bericht_ontvangen_op
+
     # --- Publieke API ------------------------------------------------------
 
     def read(self, use_cache: bool = True) -> Reading:
         with self._lock:
+            # Bij de ESP32 hoeft er niets uitgelezen te worden: het laatste
+            # bericht staat al klaar in het geheugen.
+            if self.source_mode in {"esp32", "auto"}:
+                vers = self._bericht_indien_vers()
+                if vers is not None:
+                    return vers
+                if self.source_mode == "esp32":
+                    return Reading(
+                        None, None, None, "esp32-offline",
+                        datetime.now(timezone.utc),
+                    )
+
             nu = time.monotonic()
             if (
                 use_cache
@@ -271,6 +336,8 @@ class SensorReader:
 
 
 BRON_OMSCHRIJVING = {
+    "esp32": "Live sensordata van de XIAO ESP32-C3",
+    "esp32-offline": "Geen bericht van de XIAO ESP32-C3",
     "hardware": "Live sensordata",
     "simulatie": "Simulatiemodus - geen sensor gevonden",
     "extern": "Live sensordata via externe service",

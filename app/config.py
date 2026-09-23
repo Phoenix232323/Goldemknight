@@ -121,9 +121,21 @@ class Config:
     TRUST_PROXY_HEADERS = _bool("GK_TRUST_PROXY", False)
 
     # --- Sensoren ----------------------------------------------------------
-    # auto | hardware | simulatie | extern
-    SENSOR_SOURCE = os.environ.get("GK_SENSOR_SOURCE", "auto").strip().lower()
+    # esp32     = de XIAO ESP32-C3 stuurt de metingen naar de Pi (standaard)
+    # auto      = eerst de ESP32, anders sensoren aan de Pi, anders simulatie
+    # hardware  = alleen sensoren die direct aan de Pi hangen
+    # simulatie = altijd nepdata (handig om te testen)
+    # extern    = de Pi haalt de data zelf op bij een andere service
+    SENSOR_SOURCE = os.environ.get("GK_SENSOR_SOURCE", "esp32").strip().lower()
     SENSOR_EXTERNAL_URL = os.environ.get("GK_SENSOR_URL", "")
+    # Hoe lang een bericht van de ESP32 geldig blijft. Komt er daarna niets
+    # meer binnen, dan meldt het dashboard dat de verbinding weg is in plaats
+    # van een oude waarde te blijven tonen.
+    SENSOR_MAX_AGE_SECONDS = _int("GK_SENSOR_MAX_AGE", 120)
+    # Gedeeld wachtwoord dat de ESP32 meestuurt. Leeg = iedereen op je netwerk
+    # mag metingen sturen. Vul hem in zodra het dashboard verder reikt dan je
+    # eigen netwerk.
+    SENSOR_TOKEN = os.environ.get("GK_SENSOR_TOKEN", "").strip()
     DHT_PIN = _int("GK_DHT_PIN", 4)
     DHT_TYPE = os.environ.get("GK_DHT_TYPE", "DHT22").strip().upper()
     BH1750_ADDRESS = int(os.environ.get("GK_BH1750_ADDRESS", "0x23"), 16)

@@ -6,6 +6,7 @@ moeten bovendien het CSRF-token meesturen in de header X-CSRF-Token.
 
 from __future__ import annotations
 
+import hmac
 from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, request, url_for
@@ -32,14 +33,97 @@ def _fout(melding: str, status: int = 400, code: str = "ongeldig"):
 
 # --- Sensoren ---------------------------------------------------------------
 
+def _meetwaarde(gegevens: dict, *namen: str):
+    """Haalt een getal uit de JSON; accepteert Nederlandse en Engelse namen."""
+    for naam in namen:
+        if naam not in gegevens:
+            continue
+        waarde = gegevens[naam]
+        if waarde is None or waarde == "":
+            return None
+        try:
+            getal = float(waarde)
+        except (TypeError, ValueError):
+            return None
+        if getal != getal or getal in (float("inf"), float("-inf")):
+            return None
+        return getal
+    return None
+
+
+@bp.post("/sensor")
+def sensor_ontvangen():
+    """Ontvangt een meting van de XIAO ESP32-C3.
+
+    Dit is het enige eindpunt zonder login: een microcontroller kan niet
+    inloggen. Staat er een GK_SENSOR_TOKEN in .env, dan moet de ESP32 die
+    meesturen in de header X-Sensor-Token.
+    """
+    token = current_app.config.get("SENSOR_TOKEN", "")
+    if token:
+        meegestuurd = request.headers.get("X-Sensor-Token", "")
+        if not hmac.compare_digest(token, meegestuurd):
+            current_app.logger.warning(
+                "Meting geweigerd: verkeerd sensor-token (van %s).",
+                request.remote_addr,
+            )
+            return _fout("Sensor-token klopt niet.", 401, "token")
+
+    gegevens = request.get_json(silent=True)
+    if not isinstance(gegevens, dict):
+        return (
+            jsonify({"success": False, "message": "Geen JSON-data ontvangen"}),
+            400,
+        )
+
+    temperatuur = _meetwaarde(gegevens, "temperatuur", "temperature")
+    vocht = _meetwaarde(gegevens, "luchtvochtigheid", "humidity", "vochtigheid")
+    licht = _meetwaarde(gegevens, "licht", "light")
+
+    if temperatuur is None and vocht is None and licht is None:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": (
+                        "Geen bruikbare meetwaarden. Verwacht: temperatuur, "
+                        "luchtvochtigheid en/of licht."
+                    ),
+                }
+            ),
+            400,
+        )
+
+    meting = current_app.extensions["sensor_reader"].ontvang(
+        temperatuur, vocht, licht
+    )
+    gemeten = meting.as_dict()
+
+    return jsonify(
+        {
+            "success": True,
+            "message": "Sensordata ontvangen",
+            "data": {
+                "temperature": gemeten["temperature"],
+                "humidity": gemeten["humidity"],
+                "light": gemeten["light"],
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            },
+        }
+    )
+
+
 @bp.get("/sensor")
 @api_login_required
 def sensor():
-    meting = current_app.extensions["sensor_reader"].read()
+    lezer = current_app.extensions["sensor_reader"]
+    meting = lezer.read()
     lokaal = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
     gegevens = meting.as_dict()
+    sinds = lezer.seconden_sinds_bericht()
     return jsonify(
         {
+            "seconden_sinds_bericht": None if sinds is None else int(sinds),
             # Deze drie velden zijn hetzelfde gebleven als in de eerste versie
             # van het dashboard, zodat bestaande scripts blijven werken.
             "temperature": gegevens["temperature"],
@@ -51,7 +135,7 @@ def sensor():
             "bron_omschrijving": BRON_OMSCHRIJVING.get(
                 gegevens["source"], "Sensordata"
             ),
-            "live": gegevens["source"] in {"hardware", "extern"},
+            "live": gegevens["source"] in {"esp32", "hardware", "extern"},
         }
     )
 

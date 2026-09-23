@@ -398,6 +398,18 @@ def security_overview(connection: sqlite3.Connection) -> dict:
             "uitleg": "De sessies worden ondertekend met een unieke sleutel.",
         },
         {
+            "naam": "Sensor-token ingesteld",
+            "ok": bool(config.get("SENSOR_TOKEN")),
+            "uitleg": (
+                "De ESP32 moet een token meesturen; anderen kunnen geen "
+                "metingen doorgeven."
+                if config.get("SENSOR_TOKEN")
+                else "Zonder token mag ieder apparaat op je netwerk metingen "
+                "sturen. Zet GK_SENSOR_TOKEN in .env zodra het dashboard "
+                "verder reikt dan je eigen netwerk."
+            ),
+        },
+        {
             "naam": "Bruteforce-slot actief",
             "ok": config["LOGIN_MAX_ATTEMPTS"] > 0,
             "uitleg": (

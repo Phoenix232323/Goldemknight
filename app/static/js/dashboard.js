@@ -49,6 +49,15 @@
         element.hidden = !tekst;
     }
 
+    function geledenTekst(seconden) {
+        seconden = Math.max(0, Math.round(seconden));
+        if (seconden < 60) { return seconden + " sec"; }
+        var minuten = Math.round(seconden / 60);
+        if (minuten < 60) { return minuten + (minuten === 1 ? " minuut" : " minuten"); }
+        var uren = Math.round(minuten / 60);
+        return uren + " uur";
+    }
+
     /** fetch met JSON, CSRF-token en nette foutafhandeling. */
     function api(pad, opties) {
         opties = opties || {};
@@ -91,8 +100,19 @@
             tekstIn($("#light"), getal(data.light, 0));
             tekstIn($("#timestamp"), "Laatste update: " + (data.timestamp || "--"));
 
-            statusStip.className = "stip " + (data.live ? "live" : "simulatie");
-            tekstIn(statusTekst, data.bron_omschrijving || "Sensordata");
+            var offline = /-offline$/.test(data.bron || "");
+            statusStip.className = "stip " +
+                (data.live ? "live" : (offline ? "fout" : "simulatie"));
+
+            var regel = data.bron_omschrijving || "Sensordata";
+            if (offline && data.seconden_sinds_bericht !== null &&
+                    data.seconden_sinds_bericht !== undefined) {
+                regel += " - laatste bericht " +
+                    geledenTekst(data.seconden_sinds_bericht) + " geleden";
+            } else if (offline) {
+                regel += " - er is nog geen enkele meting binnengekomen";
+            }
+            tekstIn(statusTekst, regel);
         }).catch(function () {
             statusStip.className = "stip fout";
             tekstIn(statusTekst, "Geen verbinding met de sensor-API");

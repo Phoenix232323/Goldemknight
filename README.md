@@ -3,6 +3,18 @@
 Een webdashboard voor op de Raspberry Pi 4 (Raspberry Pi OS 64-bit) dat je
 sensoren live laat zien, de metingen bewaart en er grafieken van tekent.
 
+Het meten gebeurt op een **Seeed Studio XIAO ESP32-C3**. Die stuurt elke paar
+seconden temperatuur, luchtvochtigheid en licht naar de Pi; de Pi meet zelf
+niets en zorgt voor het dashboard, de opslag en de grafieken.
+
+```
+  XIAO ESP32-C3  -- wifi -->  Raspberry Pi 4
+  (DHT22 + LDR)               (dashboard op poort 5000)
+```
+
+Het aansluiten en programmeren van de ESP32 staat in [`esp32/README.md`](esp32/README.md),
+met een kant-en-klare Arduino-schets.
+
 De oorspronkelijke kaarten met **temperatuur**, **luchtvochtigheid** en
 **licht** zijn er nog precies zo, en daar zijn deze onderdelen bij gekomen:
 
@@ -53,14 +65,53 @@ cp .env.example .env          # eventueel aanpassen
 
 ---
 
-## Sensoren aansluiten
+## De sensoren
 
-Zonder sensoren start het dashboard in **simulatiemodus**: het toont
-realistische nepdata, zodat je alles kunt uitproberen. Zodra er echte hardware
-gevonden wordt, schakelt het vanzelf over (de statusregel bovenaan zegt welke
-van de twee actief is).
+### De gewone opzet: de XIAO ESP32-C3
 
-Ondersteunde hardware:
+De ESP32-C3 meet en stuurt de waarden naar de Pi met een POST naar
+`/api/sensor`. Dat is het enige eindpunt zonder login, want een microcontroller
+kan niet inloggen.
+
+Verwachte JSON (Nederlandse namen; Engelse mogen ook):
+
+```json
+{ "temperatuur": 21.4, "luchtvochtigheid": 48.0, "licht": 310 }
+```
+
+Testen zonder ESP32 kan vanaf elke computer in je netwerk:
+
+```bash
+curl -X POST http://<ip-van-je-pi>:5000/api/sensor \
+     -H "Content-Type: application/json" \
+     -d '{"temperatuur": 21.4, "luchtvochtigheid": 48, "licht": 310}'
+```
+
+Bovenin het dashboard zie je meteen of de verbinding staat:
+
+* 🟢 *Live sensordata van de XIAO ESP32-C3*
+* 🔴 *Geen bericht van de XIAO ESP32-C3 - laatste bericht 4 minuten geleden*
+
+Na `GK_SENSOR_MAX_AGE` seconden zonder bericht (standaard twee minuten) worden
+de waarden leeggemaakt. Zo blijft er nooit een oude meting op het scherm staan
+alsof hij van nu is.
+
+### Wie mag metingen sturen?
+
+Standaard mag ieder apparaat op je netwerk dat. Voor thuis is dat prima. Wil je
+het dichtzetten, zet dan in `.env`:
+
+```ini
+GK_SENSOR_TOKEN=een-lang-zelfverzonnen-wachtwoord
+```
+
+en dezelfde waarde in de Arduino-schets bij `SENSOR_TOKEN`. De kaart
+*Veiligheid* op het dashboard laat zien of dit aanstaat.
+
+### Andere mogelijkheden
+
+Komt er later toch een sensor rechtstreeks aan de Pi, dan kan dat ook. Zet
+`GK_SENSOR_SOURCE=auto` (eerst de ESP32, anders de Pi zelf) of `hardware`.
 
 | Sensor | Aansluiting | Pakket |
 |---|---|---|
@@ -68,26 +119,14 @@ Ondersteunde hardware:
 | BH1750 licht | I2C (adres 0x23) | `smbus2` |
 | LDR via MCP3008 | SPI (kanaal 0) | `spidev` |
 
-Installeren en aanzetten:
-
 ```bash
 sudo apt install -y python3-dev libgpiod2 i2c-tools
 ./.venv/bin/pip install -r requirements-hardware.txt
 sudo raspi-config     # Interface Options -> I2C en SPI aanzetten
 ```
 
-Controleer of je I2C-sensor gezien wordt met `i2cdetect -y 1`.
-
-Heb je al een eigen sensorscript dat JSON levert? Zet dan in `.env`:
-
-```ini
-GK_SENSOR_SOURCE=extern
-GK_SENSOR_URL=http://127.0.0.1:8000/sensor
-```
-
-Verwacht antwoord: `{"temperature": 21.4, "humidity": 48.0, "light": 310}`.
-
----
+Met `GK_SENSOR_SOURCE=simulatie` draait het dashboard op realistische nepdata,
+handig om alles uit te proberen voordat de hardware er is.
 
 ## Instellingen (`.env`)
 
@@ -97,7 +136,9 @@ Alle instellingen staan met uitleg in `.env.example`. De belangrijkste:
 GK_ADMIN_USER=admin              # account bij de eerste start
 GK_ADMIN_PASSWORD=goldenknight
 
-GK_SENSOR_SOURCE=auto            # auto | hardware | simulatie | extern
+GK_SENSOR_SOURCE=esp32           # esp32 | auto | hardware | simulatie | extern
+GK_SENSOR_MAX_AGE=120            # zonder bericht zo lang, dan "offline"
+#GK_SENSOR_TOKEN=                # zet aan om de POST af te schermen
 GK_SAMPLE_INTERVAL=60            # elke minuut een meting bewaren
 GK_HISTORY_DAYS=90               # zo lang blijven metingen staan
 
@@ -194,6 +235,7 @@ app/
     css/style.css          vormgeving, licht- en donkerthema
     js/grafiek.js          eigen SVG-grafiek, zonder externe bibliotheken
     js/dashboard.js        bediening van alle onderdelen
+esp32/                     Arduino-schets voor de XIAO ESP32-C3 + uitleg
 deploy/                    systemd-service en nginx-voorbeeld
 scripts/installeren.sh     installatie in één keer
 tools/beheer.py            beheer vanaf de opdrachtregel
@@ -211,6 +253,7 @@ Alle eindpunten vragen een geldige sessie. Wijzigen vraagt daarnaast de header
 
 | Methode | Pad | Doel |
 |---|---|---|
+| POST | `/api/sensor` | **de ESP32 levert hier een meting af** (geen login) |
 | GET | `/api/sensor` | de huidige meetwaarden |
 | GET | `/api/history?periode=24u` | geschiedenis (`1u`, `6u`, `24u`, `7d`, `30d`) |
 | GET | `/api/weer` | weersoverzicht |
@@ -229,7 +272,8 @@ Alle eindpunten vragen een geldige sessie. Wijzigen vraagt daarnaast de header
 
 | Wat je ziet | Wat je kunt doen |
 |---|---|
-| "Simulatiemodus - geen sensor gevonden" | De sensor wordt niet gezien. Controleer de bedrading, of I2C/SPI aanstaat en of `requirements-hardware.txt` geïnstalleerd is. |
+| "Geen bericht van de XIAO ESP32-C3" | De ESP32 komt er niet doorheen. Kijk in de seriële monitor van de Arduino IDE: staat er wifi? klopt het IP-adres van de Pi? Zie [`esp32/README.md`](esp32/README.md). |
+| Waarden blijven op `--` staan | De ESP32 stuurt wel iets, maar met andere namen. Het moeten `temperatuur`, `luchtvochtigheid` en `licht` zijn. |
 | Grafieken zijn leeg | De metingen beginnen bij de eerste start. Na een uur staat "Laatste uur" vol. |
 | Geen weergegevens | De Pi kan `api.open-meteo.com` niet bereiken. Controleer de internetverbinding; de rest van het dashboard werkt gewoon door. |
 | Inloggen geblokkeerd | Te veel mislukte pogingen; wacht 15 minuten, of pas `GK_LOGIN_MAX_ATTEMPTS` aan. |
